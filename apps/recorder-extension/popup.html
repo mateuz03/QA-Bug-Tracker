@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>QA Truker Recorder</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header><span>●</span><div><strong>QA Truker</strong><small>Scenario Recorder</small></div></header>
+    <main>
+      <div id="status" class="status idle">Pronto para gravar</div>
+      <label>API<input id="apiUrl" value="http://localhost:3001" /></label>
+      <label>Token JWT<textarea id="token" rows="3" placeholder="Cole o token obtido no login"></textarea></label>
+      <div class="grid"><label>Projeto ID<input id="projectId" type="number" min="1" value="1" /></label><label>Cenário ID<input id="scenarioId" type="number" min="1" placeholder="Opcional" /></label></div>
+      <label>Nome do cenário<input id="title" placeholder="Ex.: Publicar um anúncio" /></label>
+      <button id="start">● Iniciar gravação</button>
+      <button id="finish" class="secondary" disabled>Finalizar e salvar</button>
+      <p id="message"></p>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

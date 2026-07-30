@@ -1,0 +1,28 @@
+{
+  "name": "qa-truker",
+  "version": "1.0.0",
+  "private": true,
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "dev": "concurrently -n API,WORKER,WEB -c magenta,yellow,cyan \"npm run dev -w backend\" \"npm run worker -w backend\" \"npm run dev -w frontend\"",
+    "start:test": "concurrently -n API,WORKER -c magenta,yellow \"npm run start -w backend\" \"npm run worker:start -w backend\"",
+    "build": "npm run build -w backend && npm run build -w frontend",
+    "lint": "npm run lint -w backend && npm run lint -w frontend",
+    "test": "npm run test -w backend",
+    "test:e2e": "playwright test",
+    "test:api": "playwright test --project=api",
+    "db:setup": "npm run db:setup -w backend",
+    "db:seed": "npm run db:seed -w backend"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.54.2",
+    "concurrently": "^9.2.0",
+    "wait-on": "^8.0.4"
+  }
+}
