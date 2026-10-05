@@ -1,5 +1,6 @@
 import { RecordingStatus, StepAction } from '@prisma/client';
 import { Router } from 'express';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { authenticate } from '../middleware/auth.js';
@@ -115,10 +116,9 @@ recordingsRouter.patch('/:id/finish', async (req, res) => {
       });
     });
   } else {
-    const latest = await prisma.testScenario.findFirst({ orderBy: { id: 'desc' }, select: { id: true } });
-    const scenario = await prisma.testScenario.create({
+    const created = await prisma.testScenario.create({
       data: {
-        code: `CT-${String((latest?.id ?? 0) + 1).padStart(3, '0')}`,
+        code: `CT-TEMP-${randomUUID()}`,
         title: recording.title,
         priority: 'MEDIUM',
         type: 'FUNCTIONAL',
@@ -127,6 +127,10 @@ recordingsRouter.patch('/:id/finish', async (req, res) => {
         projectId: recording.projectId,
         steps: { create: steps }
       }
+    });
+    const scenario = await prisma.testScenario.update({
+      where: { id: created.id },
+      data: { code: `CT-${String(created.id).padStart(3, '0')}` }
     });
     scenarioId = scenario.id;
   }

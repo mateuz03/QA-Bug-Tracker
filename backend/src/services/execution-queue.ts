@@ -22,6 +22,7 @@ export async function enqueueExecution(input: {
   browser: string;
   createdById: number;
   retryOfId?: number;
+  cycleId?: number;
 }) {
   const scenario = await prisma.testScenario.findUnique({
     where: { id: input.scenarioId },
@@ -70,6 +71,7 @@ export async function enqueueExecution(input: {
       projectId: scenario.projectId,
       createdById: input.createdById,
       retryOfId: input.retryOfId,
+      cycleId: input.cycleId,
       steps: {
         create: scenario.steps.map((step) => ({
           order: step.order,

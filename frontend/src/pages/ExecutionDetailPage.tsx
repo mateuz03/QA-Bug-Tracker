@@ -228,6 +228,7 @@ export function ExecutionDetailPage() {
           <span>Status<strong>{statusLabels[execution.status]}</strong></span>
           <span>Ambiente<strong>{execution.environment.name}</strong></span>
           <span>Duração<strong>{execution.durationMs != null ? `${(execution.durationMs / 1000).toFixed(1)}s` : '—'}</strong></span>
+          {execution.cycle && <span>Ciclo<strong>{execution.cycle.code}</strong></span>}
         </div>
       </div>
 

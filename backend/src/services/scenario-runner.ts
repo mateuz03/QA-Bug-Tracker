@@ -10,6 +10,8 @@ import {
   writeJsonEvidence
 } from './execution-artifacts.js';
 import { appendExecutionLog } from './execution-queue.js';
+import { syncCycleStatus } from './test-cycle.js';
+import { publishExecutionGitHubStatus } from './github-status.js';
 
 class StepResultError extends Error {
   constructor(message: string, public readonly actual: string) {
@@ -413,6 +415,8 @@ export async function executeQueuedScenario(executionId: number) {
         finishedAt: new Date()
       }
     });
+    await syncCycleStatus(execution.cycleId);
+    await publishExecutionGitHubStatus(execution.id);
     return;
   }
 
@@ -442,4 +446,6 @@ export async function executeQueuedScenario(executionId: number) {
       finishedAt: new Date()
     }
   });
+  await syncCycleStatus(execution.cycleId);
+  await publishExecutionGitHubStatus(execution.id);
 }

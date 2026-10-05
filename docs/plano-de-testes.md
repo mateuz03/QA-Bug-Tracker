@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-Validar os fluxos críticos do QA Bug Tracker e reduzir o risco de falhas em autenticação, permissões e persistência de ocorrências.
+Validar os fluxos críticos do QA Truker e reduzir o risco de falhas em autenticação, permissões e persistência de ocorrências.
 
 ## Escopo
 

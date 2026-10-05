@@ -2,6 +2,7 @@ import {
   Bug,
   ChevronDown,
   CirclePlay,
+  ClipboardList,
   FlaskConical,
   FolderKanban,
   LayoutDashboard,
@@ -42,6 +43,7 @@ export function AppShell() {
           <NavLink to="/dashboard"><LayoutDashboard /> Visão geral</NavLink>
           <NavLink to="/projetos"><FolderKanban /> Projetos</NavLink>
           <NavLink to="/cenarios"><FlaskConical /> Cenários</NavLink>
+          <NavLink to="/planos"><ClipboardList /> Planos e ciclos</NavLink>
           <NavLink to="/execucoes"><CirclePlay /> Execuções</NavLink>
           <NavLink to="/gravador"><Radio /> Gravador</NavLink>
           <NavLink to="/bugs"><ListChecks /> Ocorrências</NavLink>

@@ -1,5 +1,6 @@
 import { Priority, ScenarioStatus, ScenarioType, ScreenshotMode, StepAction } from '@prisma/client';
 import { Router } from 'express';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { authenticate } from '../middleware/auth.js';
@@ -86,11 +87,9 @@ const scenarioSchema = z.object({
 
 scenariosRouter.post('/', async (req, res) => {
   const data = scenarioSchema.parse(req.body);
-  const latest = await prisma.testScenario.findFirst({ orderBy: { id: 'desc' }, select: { id: true } });
-  const code = `CT-${String((latest?.id ?? 0) + 1).padStart(3, '0')}`;
-  const scenario = await prisma.testScenario.create({
+  const created = await prisma.testScenario.create({
     data: {
-      code,
+      code: `CT-TEMP-${randomUUID()}`,
       title: data.title,
       description: data.description,
       preconditions: data.preconditions,
@@ -111,6 +110,11 @@ scenariosRouter.post('/', async (req, res) => {
         create: data.steps.map((step, index) => ({ ...step, order: index + 1 }))
       }
     },
+    include: { steps: { orderBy: { order: 'asc' } }, project: true, requirement: true }
+  });
+  const scenario = await prisma.testScenario.update({
+    where: { id: created.id },
+    data: { code: `CT-${String(created.id).padStart(3, '0')}` },
     include: { steps: { orderBy: { order: 'asc' } }, project: true, requirement: true }
   });
   res.status(201).json(scenario);
@@ -155,10 +159,9 @@ scenariosRouter.post('/:id/duplicate', async (req, res) => {
     include: { steps: { orderBy: { order: 'asc' } } }
   });
   if (!source) throw new HttpError(404, 'Cenário não encontrado.');
-  const latest = await prisma.testScenario.findFirst({ orderBy: { id: 'desc' }, select: { id: true } });
-  const duplicate = await prisma.testScenario.create({
+  const created = await prisma.testScenario.create({
     data: {
-      code: `CT-${String((latest?.id ?? 0) + 1).padStart(3, '0')}`,
+      code: `CT-TEMP-${randomUUID()}`,
       title: `${source.title} — cópia`,
       description: source.description,
       preconditions: source.preconditions,
@@ -181,6 +184,10 @@ scenariosRouter.post('/:id/duplicate', async (req, res) => {
         }))
       }
     }
+  });
+  const duplicate = await prisma.testScenario.update({
+    where: { id: created.id },
+    data: { code: `CT-${String(created.id).padStart(3, '0')}` }
   });
   res.status(201).json(duplicate);
 });

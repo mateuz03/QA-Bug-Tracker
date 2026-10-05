@@ -51,6 +51,18 @@ async function main() {
     }
   });
 
+  await prisma.projectMember.upsert({
+    where: { projectId_userId: { projectId: project.id, userId: admin.id } },
+    update: { role: 'OWNER' },
+    create: { projectId: project.id, userId: admin.id, role: 'OWNER' }
+  });
+
+  await prisma.projectMember.upsert({
+    where: { projectId_userId: { projectId: project.id, userId: analyst.id } },
+    update: { role: 'MANAGER' },
+    create: { projectId: project.id, userId: analyst.id, role: 'MANAGER' }
+  });
+
   const environment = await prisma.environment.upsert({
     where: { projectId_name: { projectId: project.id, name: 'Local' } },
     update: { baseUrl: 'http://localhost:5173', isDefault: true },
@@ -157,6 +169,155 @@ async function main() {
     where: { scenarioId: scenario.id, order: 4 },
     data: { target: 'button.button-primary' }
   });
+
+  const manualScenario = await prisma.testScenario.upsert({
+    where: { code: 'CT-MAN-001' },
+    update: {},
+    create: {
+      code: 'CT-MAN-001',
+      title: 'Revisão exploratória do dashboard',
+      description: 'Valida visualmente indicadores, navegação e legibilidade do dashboard.',
+      preconditions: 'Usuário administrador autenticado e dados de demonstração carregados.',
+      priority: Priority.MEDIUM,
+      type: ScenarioType.REGRESSION,
+      status: ScenarioStatus.ACTIVE,
+      automated: false,
+      projectId: project.id
+    }
+  });
+
+  if ((await prisma.scenarioStep.count({ where: { scenarioId: manualScenario.id } })) === 0) {
+    await prisma.scenarioStep.createMany({
+      data: [
+        { scenarioId: manualScenario.id, order: 1, action: StepAction.NAVIGATE, description: 'Acessar o dashboard autenticado', value: '/dashboard' },
+        { scenarioId: manualScenario.id, order: 2, action: StepAction.ASSERT_VISIBLE, description: 'Conferir indicadores e navegação principal', target: 'main' }
+      ]
+    });
+  }
+
+  const smokeSuite = await prisma.testSuite.upsert({
+    where: { code: 'SUITE-001' },
+    update: {},
+    create: {
+      code: 'SUITE-001',
+      name: 'Smoke crítico',
+      description: 'Cenários essenciais para validar rapidamente uma nova versão.',
+      projectId: project.id,
+      createdById: admin.id
+    }
+  });
+
+  await prisma.testSuiteScenario.upsert({
+    where: { suiteId_scenarioId: { suiteId: smokeSuite.id, scenarioId: scenario.id } },
+    update: { order: 1 },
+    create: { suiteId: smokeSuite.id, scenarioId: scenario.id, order: 1 }
+  });
+  await prisma.testSuiteScenario.upsert({
+    where: { suiteId_scenarioId: { suiteId: smokeSuite.id, scenarioId: manualScenario.id } },
+    update: { order: 2 },
+    create: { suiteId: smokeSuite.id, scenarioId: manualScenario.id, order: 2 }
+  });
+
+  const releasePlan = await prisma.testPlan.upsert({
+    where: { code: 'PLAN-001' },
+    update: {},
+    create: {
+      code: 'PLAN-001',
+      name: 'Validação da versão 1.0',
+      description: 'Plano demonstrativo para validação funcional e regressão do MVP.',
+      objective: 'Comprovar que os fluxos críticos estão prontos para apresentação.',
+      releaseVersion: '1.0.0',
+      status: 'ACTIVE',
+      projectId: project.id,
+      createdById: admin.id
+    }
+  });
+
+  await prisma.testPlanSuite.upsert({
+    where: { planId_suiteId: { planId: releasePlan.id, suiteId: smokeSuite.id } },
+    update: { order: 1 },
+    create: { planId: releasePlan.id, suiteId: smokeSuite.id, order: 1 }
+  });
+
+  const releaseCycle = await prisma.testCycle.upsert({
+    where: { code: 'CYCLE-001' },
+    update: {},
+    create: {
+      code: 'CYCLE-001',
+      name: 'Smoke local da versão 1.0',
+      description: 'Ciclo de demonstração preparado para execução em Chromium.',
+      browser: 'chromium',
+      planId: releasePlan.id,
+      environmentId: environment.id,
+      createdById: admin.id
+    }
+  });
+
+  await prisma.testCycleScenario.upsert({
+    where: { cycleId_scenarioId: { cycleId: releaseCycle.id, scenarioId: scenario.id } },
+    update: { order: 1 },
+    create: { cycleId: releaseCycle.id, scenarioId: scenario.id, order: 1 }
+  });
+  await prisma.testCycleScenario.upsert({
+    where: { cycleId_scenarioId: { cycleId: releaseCycle.id, scenarioId: manualScenario.id } },
+    update: { order: 2 },
+    create: { cycleId: releaseCycle.id, scenarioId: manualScenario.id, order: 2 }
+  });
+
+  const baselineCycle = await prisma.testCycle.upsert({
+    where: { code: 'CYCLE-HIST-001' },
+    update: { status: 'COMPLETED' },
+    create: {
+      code: 'CYCLE-HIST-001',
+      name: 'Baseline estável da versão 0.9',
+      description: 'Rodada histórica usada como referência para comparação.',
+      status: 'COMPLETED',
+      browser: 'chromium',
+      plannedStart: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000),
+      plannedEnd: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
+      startedAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000),
+      finishedAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
+      planId: releasePlan.id,
+      environmentId: environment.id,
+      createdById: admin.id,
+      createdAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000)
+    }
+  });
+  const regressionCycle = await prisma.testCycle.upsert({
+    where: { code: 'CYCLE-HIST-002' },
+    update: { status: 'COMPLETED' },
+    create: {
+      code: 'CYCLE-HIST-002',
+      name: 'Regressão da versão 1.0 RC',
+      description: 'Rodada histórica com uma regressão identificada no login.',
+      status: 'COMPLETED',
+      browser: 'chromium',
+      plannedStart: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000),
+      plannedEnd: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+      startedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000),
+      finishedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+      planId: releasePlan.id,
+      environmentId: environment.id,
+      createdById: admin.id,
+      createdAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000)
+    }
+  });
+
+  for (const [cycleId, automatedResult, manualResult] of [
+    [baselineCycle.id, 'PASSED', 'PASSED'],
+    [regressionCycle.id, 'FAILED', 'PASSED']
+  ] as const) {
+    await prisma.testCycleScenario.upsert({
+      where: { cycleId_scenarioId: { cycleId, scenarioId: scenario.id } },
+      update: { order: 1, result: automatedResult, executedById: admin.id },
+      create: { cycleId, scenarioId: scenario.id, order: 1, result: automatedResult, executedById: admin.id, executedAt: new Date() }
+    });
+    await prisma.testCycleScenario.upsert({
+      where: { cycleId_scenarioId: { cycleId, scenarioId: manualScenario.id } },
+      update: { order: 2, result: manualResult, executedById: admin.id },
+      create: { cycleId, scenarioId: manualScenario.id, order: 2, result: manualResult, executedById: admin.id, executedAt: new Date() }
+    });
+  }
 
   const existingBugs = await prisma.bug.count();
   if (existingBugs === 0) {

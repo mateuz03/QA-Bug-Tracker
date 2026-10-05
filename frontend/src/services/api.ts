@@ -1,14 +1,31 @@
 import type {
   Bug,
+  BugExternalIssue,
+  AuditLog,
   BugPayload,
   DashboardData,
   ExecutionEvidence,
   PaginatedBugs,
   Project,
+  ProjectMember,
+  ProjectRole,
+  ProjectApiKey,
+  GitHubIntegration,
+  JiraIntegration,
   RecordingSession,
   Requirement,
   ScenarioPayload,
   TestExecution,
+  TestCycle,
+  TestCyclePayload,
+  CycleScenarioResult,
+  TestCycleStatus,
+  TestCycleComparison,
+  TestPlan,
+  TestPlanPayload,
+  TestPlanStatus,
+  TestSuite,
+  TestSuitePayload,
   TestScenario,
   User
 } from '../types';
@@ -79,8 +96,47 @@ export const api = {
       body: JSON.stringify({ status })
     }),
   deleteBug: (id: number) => request<void>(`/bugs/${id}`, { method: 'DELETE' }),
+  syncBugToGitHub: (id: number) =>
+    request<BugExternalIssue>(`/bugs/${id}/github-sync`, { method: 'POST' }),
+  syncBugToJira: (id: number) =>
+    request<BugExternalIssue>(`/bugs/${id}/jira-sync`, { method: 'POST' }),
   projects: () => request<Project[]>('/projects'),
   project: (id: number) => request<Project>(`/projects/${id}`),
+  projectMembers: (id: number) => request<ProjectMember[]>(`/projects/${id}/members`),
+  updateProjectMember: (projectId: number, userId: number, role: Exclude<ProjectRole, 'OWNER'>) =>
+    request<ProjectMember>(`/projects/${projectId}/members/${userId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ role })
+    }),
+  removeProjectMember: (projectId: number, userId: number) =>
+    request<void>(`/projects/${projectId}/members/${userId}`, { method: 'DELETE' }),
+  projectAudit: (id: number) => request<AuditLog[]>(`/projects/${id}/audit`),
+  projectApiKeys: (id: number) => request<ProjectApiKey[]>(`/projects/${id}/api-keys`),
+  createProjectApiKey: (projectId: number, payload: { name: string; expiresAt?: string | null }) =>
+    request<ProjectApiKey & { token: string }>(`/projects/${projectId}/api-keys`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  revokeProjectApiKey: (projectId: number, keyId: number) =>
+    request<void>(`/projects/${projectId}/api-keys/${keyId}`, { method: 'DELETE' }),
+  githubIntegration: (projectId: number) =>
+    request<GitHubIntegration | null>(`/projects/${projectId}/github-integration`),
+  updateGitHubIntegration: (projectId: number, payload: { repository: string; token?: string; enabled: boolean }) =>
+    request<GitHubIntegration>(`/projects/${projectId}/github-integration`, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    }),
+  removeGitHubIntegration: (projectId: number) =>
+    request<void>(`/projects/${projectId}/github-integration`, { method: 'DELETE' }),
+  jiraIntegration: (projectId: number) =>
+    request<JiraIntegration | null>(`/projects/${projectId}/jira-integration`),
+  updateJiraIntegration: (projectId: number, payload: { siteUrl: string; email: string; projectKey: string; issueType: string; token?: string; enabled: boolean }) =>
+    request<JiraIntegration>(`/projects/${projectId}/jira-integration`, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    }),
+  removeJiraIntegration: (projectId: number) =>
+    request<void>(`/projects/${projectId}/jira-integration`, { method: 'DELETE' }),
   createProject: (payload: {
     name: string;
     description?: string;
@@ -132,5 +188,41 @@ export const api = {
     requestBlob(`/executions/${id}/report.${format}`),
   createBugFromExecution: (id: number, payload: { title?: string; severity: string; priority: string }) =>
     request<Bug>(`/executions/${id}/bugs`, { method: 'POST', body: JSON.stringify(payload) }),
-  recordings: () => request<RecordingSession[]>('/recordings')
+  recordings: () => request<RecordingSession[]>('/recordings'),
+  testPlans: (projectId?: number) =>
+    request<TestPlan[]>(`/test-plans${projectId ? `?projectId=${projectId}` : ''}`),
+  testPlan: (planId: number) => request<TestPlan>(`/test-plans/${planId}`),
+  testSuites: (projectId?: number) =>
+    request<TestSuite[]>(`/test-plans/suites${projectId ? `?projectId=${projectId}` : ''}`),
+  createTestSuite: (payload: TestSuitePayload) =>
+    request<TestSuite>('/test-plans/suites', { method: 'POST', body: JSON.stringify(payload) }),
+  updateTestSuite: (suiteId: number, payload: Omit<TestSuitePayload, 'projectId'>) =>
+    request<TestSuite>(`/test-plans/suites/${suiteId}`, { method: 'PUT', body: JSON.stringify(payload) }),
+  createTestPlan: (payload: TestPlanPayload) =>
+    request<TestPlan>('/test-plans', { method: 'POST', body: JSON.stringify(payload) }),
+  updateTestPlan: (planId: number, payload: Omit<TestPlanPayload, 'projectId'> & { status: TestPlanStatus }) =>
+    request<TestPlan>(`/test-plans/${planId}`, { method: 'PUT', body: JSON.stringify(payload) }),
+  createTestCycle: (planId: number, payload: TestCyclePayload) =>
+    request<TestCycle>(`/test-plans/${planId}/cycles`, { method: 'POST', body: JSON.stringify(payload) }),
+  testCycle: (cycleId: number) => request<TestCycle>(`/test-plans/cycles/${cycleId}`),
+  startTestCycle: (cycleId: number) =>
+    request<{ cycleId: number; executions: TestExecution[]; skipped: { scenarioId: number; reason: string }[] }>(`/test-plans/cycles/${cycleId}/start`, { method: 'POST' }),
+  scheduleTestCycle: (cycleId: number, scheduledAt: string | null) =>
+    request<TestCycle>(`/test-plans/cycles/${cycleId}/schedule`, {
+      method: 'PATCH',
+      body: JSON.stringify({ scheduledAt })
+    }),
+  updateTestCycleStatus: (cycleId: number, status: TestCycleStatus) =>
+    request<TestCycle>(`/test-plans/cycles/${cycleId}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+  updateCycleScenarioResult: (cycleId: number, scenarioId: number, result: CycleScenarioResult, notes?: string) =>
+    request<{ item: unknown; cycleStatus?: TestCycleStatus }>(`/test-plans/cycles/${cycleId}/scenarios/${scenarioId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ result, notes: notes || null })
+    }),
+  compareTestCycles: (planId: number, baselineId?: number, targetId?: number) => {
+    const query = new URLSearchParams();
+    if (baselineId) query.set('baselineId', String(baselineId));
+    if (targetId) query.set('targetId', String(targetId));
+    return request<TestCycleComparison>(`/test-plans/${planId}/comparison${query.size ? `?${query}` : ''}`);
+  }
 };

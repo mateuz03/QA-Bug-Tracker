@@ -14,6 +14,9 @@ import { RecorderPage } from './pages/RecorderPage';
 import { ScenarioDetailPage } from './pages/ScenarioDetailPage';
 import { ScenarioFormPage } from './pages/ScenarioFormPage';
 import { ScenariosPage } from './pages/ScenariosPage';
+import { TestPlansPage } from './pages/TestPlansPage';
+import { TestCycleDetailPage } from './pages/TestCycleDetailPage';
+import { TestCycleComparisonPage } from './pages/TestCycleComparisonPage';
 
 function ProtectedLayout() {
   const { user, loading } = useAuth();
@@ -35,6 +38,9 @@ export default function App() {
         <Route path="/cenarios/novo" element={<ScenarioFormPage />} />
         <Route path="/cenarios/:id" element={<ScenarioDetailPage />} />
         <Route path="/cenarios/:id/editar" element={<ScenarioFormPage />} />
+        <Route path="/planos" element={<TestPlansPage />} />
+        <Route path="/planos/ciclos/:id" element={<TestCycleDetailPage />} />
+        <Route path="/planos/:planId/comparar" element={<TestCycleComparisonPage />} />
         <Route path="/execucoes" element={<ExecutionsPage />} />
         <Route path="/execucoes/:id" element={<ExecutionDetailPage />} />
         <Route path="/gravador" element={<RecorderPage />} />

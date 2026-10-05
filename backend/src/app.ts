@@ -11,6 +11,8 @@ import { projectsRouter } from './routes/projects.js';
 import { recordingsRouter } from './routes/recordings.js';
 import { scenariosRouter } from './routes/scenarios.js';
 import { usersRouter } from './routes/users.js';
+import { testPlansRouter } from './routes/test-plans.js';
+import { pipelineRouter } from './routes/pipeline.js';
 
 export const app = express();
 
@@ -40,5 +42,7 @@ app.use('/api/projects', projectsRouter);
 app.use('/api/scenarios', scenariosRouter);
 app.use('/api/executions', executionsRouter);
 app.use('/api/recordings', recordingsRouter);
+app.use('/api/test-plans', testPlansRouter);
+app.use('/api/pipeline', pipelineRouter);
 app.use((_req, res) => res.status(404).json({ message: 'Rota não encontrada.' }));
 app.use(errorHandler);

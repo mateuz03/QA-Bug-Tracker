@@ -1,9 +1,12 @@
-import { BugStatus, Prisma, Priority, Role, Severity } from '@prisma/client';
+import { BugStatus, Prisma, Priority, ProjectRole, Role, Severity } from '@prisma/client';
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { authenticate, authorize } from '../middleware/auth.js';
 import { HttpError } from '../utils/http-error.js';
+import { syncBugToGitHub } from '../services/github-issues.js';
+import { syncBugToJira } from '../services/jira-issues.js';
+import { recordAudit, requireProjectRole } from '../services/project-access.js';
 
 export const bugsRouter = Router();
 
@@ -44,7 +47,8 @@ const bugInclude = {
   reporter: { select: { id: true, name: true, email: true } },
   project: { select: { id: true, code: true, name: true } },
   scenario: { select: { id: true, code: true, title: true } },
-  execution: { select: { id: true, code: true, status: true } }
+  execution: { select: { id: true, code: true, status: true } },
+  externalIssues: { orderBy: { createdAt: 'asc' } }
 } satisfies Prisma.BugInclude;
 
 bugsRouter.get('/', async (req, res) => {
@@ -122,6 +126,52 @@ bugsRouter.patch('/:id/status', async (req, res) => {
     include: bugInclude
   });
   res.json(bug);
+});
+
+bugsRouter.post('/:id/github-sync', async (req, res) => {
+  const id = z.coerce.number().int().positive().parse(req.params.id);
+  const bug = await prisma.bug.findUnique({ where: { id }, select: { id: true, code: true, projectId: true } });
+  if (!bug) throw new HttpError(404, 'Bug não encontrado.');
+  if (!bug.projectId) throw new HttpError(409, 'Vincule o bug a um projeto antes de sincronizar.');
+  await requireProjectRole(req.user!, bug.projectId, ProjectRole.MANAGER);
+  const externalIssue = await syncBugToGitHub(bug.id);
+  await recordAudit({
+    projectId: bug.projectId,
+    actorId: req.user!.id,
+    action: 'BUG_GITHUB_SYNCED',
+    entityType: 'BUG',
+    entityId: bug.id,
+    details: {
+      bugCode: bug.code,
+      issueNumber: externalIssue.externalKey,
+      issueUrl: externalIssue.url,
+      state: externalIssue.state
+    }
+  });
+  res.json(externalIssue);
+});
+
+bugsRouter.post('/:id/jira-sync', async (req, res) => {
+  const id = z.coerce.number().int().positive().parse(req.params.id);
+  const bug = await prisma.bug.findUnique({ where: { id }, select: { id: true, code: true, projectId: true } });
+  if (!bug) throw new HttpError(404, 'Bug não encontrado.');
+  if (!bug.projectId) throw new HttpError(409, 'Vincule o bug a um projeto antes de sincronizar.');
+  await requireProjectRole(req.user!, bug.projectId, ProjectRole.MANAGER);
+  const externalIssue = await syncBugToJira(bug.id);
+  await recordAudit({
+    projectId: bug.projectId,
+    actorId: req.user!.id,
+    action: 'BUG_JIRA_SYNCED',
+    entityType: 'BUG',
+    entityId: bug.id,
+    details: {
+      bugCode: bug.code,
+      issueKey: externalIssue.externalKey,
+      issueUrl: externalIssue.url,
+      state: externalIssue.state
+    }
+  });
+  res.json(externalIssue);
 });
 
 bugsRouter.delete('/:id', authorize(Role.ADMIN), async (req, res) => {

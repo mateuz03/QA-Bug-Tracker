@@ -2,9 +2,11 @@ import { prisma } from './lib/prisma.js';
 import { purgeExpiredEvidences } from './services/execution-artifacts.js';
 import { claimNextExecution, recoverInterruptedExecutions } from './services/execution-queue.js';
 import { executeQueuedScenario } from './services/scenario-runner.js';
+import { startDueCycles } from './services/test-cycle.js';
 
 let shuttingDown = false;
 let processing = false;
+let scheduling = false;
 
 async function processQueue() {
   if (processing || shuttingDown) return;
@@ -19,10 +21,27 @@ async function processQueue() {
   }
 }
 
+async function processSchedules() {
+  if (scheduling || shuttingDown) return;
+  scheduling = true;
+  try {
+    const results = await startDueCycles();
+    for (const result of results) {
+      if (result.started) console.log(`${result.code} iniciado pelo agendador.`);
+      else console.warn(`${result.code} não pôde ser iniciado: ${result.error}`);
+    }
+  } catch (error) {
+    console.error('Falha no agendador de ciclos:', error);
+  } finally {
+    scheduling = false;
+  }
+}
+
 async function start() {
   const recovered = await recoverInterruptedExecutions();
   const purged = await purgeExpiredEvidences();
   console.log(`Worker de execuções disponível.${recovered ? ` ${recovered} execução(ões) recuperada(s).` : ''}${purged ? ` ${purged} pacote(s) de evidências expirado(s) removido(s).` : ''}`);
+  await processSchedules();
   await processQueue();
   const timer = setInterval(() => {
     void processQueue();
@@ -30,13 +49,17 @@ async function start() {
   const retentionTimer = setInterval(() => {
     void purgeExpiredEvidences().catch((error) => console.error('Falha ao aplicar retenção:', error));
   }, 60 * 60 * 1000);
+  const scheduleTimer = setInterval(() => {
+    void processSchedules();
+  }, 5000);
 
   async function shutdown() {
     if (shuttingDown) return;
     shuttingDown = true;
     clearInterval(timer);
     clearInterval(retentionTimer);
-    while (processing) {
+    clearInterval(scheduleTimer);
+    while (processing || scheduling) {
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
     await prisma.$disconnect();

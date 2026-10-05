@@ -1,7 +1,9 @@
 export type Role = 'ADMIN' | 'ANALYST';
+export type ProjectRole = 'OWNER' | 'MANAGER' | 'VIEWER';
 export type Severity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 export type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
 export type BugStatus = 'OPEN' | 'IN_PROGRESS' | 'IN_REVIEW' | 'RESOLVED' | 'CLOSED';
+export type ExternalIssueProvider = 'GITHUB' | 'JIRA';
 export type ProjectStatus = 'ACTIVE' | 'PAUSED' | 'ARCHIVED';
 export type RequirementStatus = 'DRAFT' | 'READY' | 'COVERED' | 'BLOCKED';
 export type ScenarioType = 'FUNCTIONAL' | 'REGRESSION' | 'SMOKE' | 'INTEGRATION';
@@ -41,6 +43,21 @@ export type Bug = {
   project?: Pick<Project, 'id' | 'code' | 'name'> | null;
   scenario?: Pick<TestScenario, 'id' | 'code' | 'title'> | null;
   execution?: Pick<TestExecution, 'id' | 'code' | 'status'> | null;
+  externalIssues?: BugExternalIssue[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type BugExternalIssue = {
+  id: number;
+  provider: ExternalIssueProvider;
+  externalKey: string;
+  url: string;
+  state: string;
+  lastSyncedAt?: string | null;
+  lastError?: string | null;
+  metadata?: Record<string, unknown> | null;
+  bugId: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -114,6 +131,8 @@ export type Project = {
   status: ProjectStatus;
   ownerId: number;
   owner: Pick<User, 'id' | 'name' | 'email'>;
+  currentUserRole?: ProjectRole;
+  members?: ProjectMember[];
   environments: Environment[];
   requirements?: Requirement[];
   scenarios?: TestScenario[];
@@ -122,6 +141,65 @@ export type Project = {
   passRate?: number | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type ProjectMember = {
+  projectId: number;
+  userId: number;
+  role: ProjectRole;
+  user: User;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AuditLog = {
+  id: number;
+  action: string;
+  entityType: string;
+  entityId?: string | null;
+  details?: Record<string, unknown> | null;
+  projectId: number;
+  actorId: number;
+  actor: Pick<User, 'id' | 'name' | 'email'>;
+  createdAt: string;
+};
+
+export type ProjectApiKey = {
+  id: number;
+  name: string;
+  prefix: string;
+  token?: string;
+  lastUsedAt?: string | null;
+  expiresAt?: string | null;
+  revokedAt?: string | null;
+  createdAt: string;
+  createdBy: Pick<User, 'id' | 'name' | 'email'>;
+};
+
+export type GitHubIntegration = {
+  id: number;
+  repositoryOwner: string;
+  repositoryName: string;
+  enabled: boolean;
+  lastPublishedAt?: string | null;
+  lastError?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  createdBy?: Pick<User, 'id' | 'name' | 'email'>;
+};
+
+export type JiraIntegration = {
+  id: number;
+  siteUrl: string;
+  email: string;
+  jiraProjectKey: string;
+  issueType: string;
+  enabled: boolean;
+  lastSyncedAt?: string | null;
+  lastError?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  createdBy?: Pick<User, 'id' | 'name' | 'email'>;
 };
 
 export type ScenarioStep = {
@@ -243,6 +321,13 @@ export type TestExecution = {
   project: Pick<Project, 'id' | 'code' | 'name'>;
   environment: Environment;
   createdBy?: Pick<User, 'id' | 'name' | 'email'>;
+  cycle?: {
+    id: number;
+    code: string;
+    name: string;
+    status: TestCycleStatus;
+    plan?: { id: number; code: string; name: string; releaseVersion?: string | null };
+  } | null;
   steps?: ExecutionStep[];
   logs?: ExecutionLog[];
   evidences?: ExecutionEvidence[];
@@ -255,6 +340,149 @@ export type TestExecution = {
   startedAt?: string | null;
   finishedAt?: string | null;
   createdAt: string;
+  cycleId?: number | null;
+};
+
+export type TestPlanStatus = 'DRAFT' | 'ACTIVE' | 'COMPLETED' | 'ARCHIVED';
+export type TestCycleStatus = 'PLANNED' | 'RUNNING' | 'COMPLETED' | 'CANCELLED';
+export type CycleScenarioResult = 'NOT_RUN' | 'PASSED' | 'FAILED' | 'BLOCKED';
+
+export type TestSuite = {
+  id: number;
+  code: string;
+  name: string;
+  description?: string | null;
+  projectId: number;
+  project?: Pick<Project, 'id' | 'code' | 'name'>;
+  scenarios: {
+    order: number;
+    scenario: Pick<TestScenario, 'id' | 'code' | 'title' | 'automated' | 'status'>;
+  }[];
+  _count?: { plans: number };
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TestCycleSummary = {
+  total: number;
+  executed: number;
+  passed: number;
+  failed: number;
+  blocked: number;
+  running: number;
+  queued: number;
+  notRun: number;
+  progress: number;
+};
+
+export type TestCycleScenario = {
+  scenarioId: number;
+  order?: number;
+  result: CycleScenarioResult;
+  notes?: string | null;
+  executedAt?: string | null;
+  executedBy?: Pick<User, 'id' | 'name'> | null;
+  scenario?: TestScenario;
+};
+
+export type TestCycle = {
+  id: number;
+  code: string;
+  name: string;
+  description?: string | null;
+  status: TestCycleStatus;
+  browser: 'chromium' | 'firefox' | 'webkit';
+  plannedStart?: string | null;
+  plannedEnd?: string | null;
+  scheduledAt?: string | null;
+  startedAt?: string | null;
+  finishedAt?: string | null;
+  planId: number;
+  plan?: Pick<TestPlan, 'id' | 'code' | 'name' | 'releaseVersion' | 'status'> & {
+    project?: Pick<Project, 'id' | 'code' | 'name'>;
+  };
+  environmentId: number;
+  environment: Environment;
+  createdBy?: Pick<User, 'id' | 'name'>;
+  scenarios: TestCycleScenario[];
+  executions: (Pick<TestExecution, 'id' | 'code' | 'scenarioId' | 'status' | 'createdAt'> & {
+    scenario?: Pick<TestScenario, 'id' | 'code' | 'title'>;
+  })[];
+  summary: TestCycleSummary;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TestPlan = {
+  id: number;
+  code: string;
+  name: string;
+  description?: string | null;
+  objective?: string | null;
+  releaseVersion?: string | null;
+  status: TestPlanStatus;
+  projectId: number;
+  project: Pick<Project, 'id' | 'code' | 'name'> & { environments: Environment[] };
+  createdBy: Pick<User, 'id' | 'name'>;
+  suites: { order: number; suite: TestSuite }[];
+  cycles: TestCycle[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TestSuitePayload = {
+  projectId: number;
+  name: string;
+  description?: string | null;
+  scenarioIds: number[];
+};
+
+export type TestPlanPayload = {
+  projectId: number;
+  name: string;
+  description?: string | null;
+  objective?: string | null;
+  releaseVersion?: string | null;
+  status?: TestPlanStatus;
+  suiteIds: number[];
+};
+
+export type TestCyclePayload = {
+  name: string;
+  description?: string | null;
+  environmentId: number;
+  browser: 'chromium' | 'firefox' | 'webkit';
+  plannedStart?: string | null;
+  plannedEnd?: string | null;
+  scheduledAt?: string | null;
+  suiteIds?: number[];
+};
+
+export type CycleComparisonClassification = 'REGRESSION' | 'IMPROVEMENT' | 'UNCHANGED' | 'ADDED' | 'REMOVED' | 'CHANGED';
+
+export type TestCycleComparison = {
+  plan: Pick<TestPlan, 'id' | 'code' | 'name' | 'releaseVersion'> & {
+    project: Pick<Project, 'id' | 'code' | 'name'>;
+  };
+  baseline: Pick<TestCycle, 'id' | 'code' | 'name' | 'status' | 'createdAt' | 'finishedAt'> & { passRate: number };
+  target: Pick<TestCycle, 'id' | 'code' | 'name' | 'status' | 'createdAt' | 'finishedAt'> & { passRate: number };
+  summary: {
+    total: number;
+    regressions: number;
+    improvements: number;
+    changed: number;
+    unchanged: number;
+    added: number;
+    removed: number;
+    passRateDelta: number;
+  };
+  items: {
+    scenarioId: number;
+    scenario: Pick<TestScenario, 'id' | 'code' | 'title' | 'automated'>;
+    baselineResult: CycleScenarioResult | ExecutionStatus | null;
+    targetResult: CycleScenarioResult | ExecutionStatus | null;
+    classification: CycleComparisonClassification;
+  }[];
 };
 
 export type RecordingSession = {

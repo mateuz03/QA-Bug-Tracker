@@ -12,6 +12,12 @@ enum Role {
   ANALYST
 }
 
+enum ProjectRole {
+  OWNER
+  MANAGER
+  VIEWER
+}
+
 enum Severity {
   LOW
   MEDIUM
@@ -116,36 +122,71 @@ enum RecordingStatus {
   CANCELLED
 }
 
+enum TestPlanStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+enum TestCycleStatus {
+  PLANNED
+  RUNNING
+  COMPLETED
+  CANCELLED
+}
+
+enum CycleScenarioResult {
+  NOT_RUN
+  PASSED
+  FAILED
+  BLOCKED
+}
+
+enum ExternalIssueProvider {
+  GITHUB
+  JIRA
+}
+
 model User {
-  id                Int                 @id @default(autoincrement())
-  name              String
-  email             String              @unique
-  passwordHash      String
-  role              Role                @default(ANALYST)
-  active            Boolean             @default(true)
-  assignedBugs      Bug[]               @relation("BugAssignee")
-  createdBugs       Bug[]               @relation("BugReporter")
-  ownedProjects     Project[]           @relation("ProjectOwner")
-  executions        TestExecution[]
-  uploadedEvidences ExecutionEvidence[]
-  recordings        RecordingSession[]
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
+  id                     Int                 @id @default(autoincrement())
+  name                   String
+  email                  String              @unique
+  passwordHash           String
+  role                   Role                @default(ANALYST)
+  active                 Boolean             @default(true)
+  assignedBugs           Bug[]               @relation("BugAssignee")
+  createdBugs            Bug[]               @relation("BugReporter")
+  ownedProjects          Project[]           @relation("ProjectOwner")
+  executions             TestExecution[]
+  uploadedEvidences      ExecutionEvidence[]
+  recordings             RecordingSession[]
+  createdTestPlans       TestPlan[]          @relation("TestPlanCreator")
+  createdTestSuites      TestSuite[]         @relation("TestSuiteCreator")
+  createdTestCycles      TestCycle[]         @relation("TestCycleCreator")
+  executedCycleScenarios TestCycleScenario[] @relation("CycleScenarioExecutor")
+  projectMemberships     ProjectMember[]
+  auditLogs              AuditLog[]
+  createdProjectApiKeys  ProjectApiKey[]
+  configuredGitHub       GitHubIntegration[]
+  configuredJira         JiraIntegration[]
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
 }
 
 model Bug {
-  id             Int            @id @default(autoincrement())
-  code           String         @unique
+  id             Int                @id @default(autoincrement())
+  code           String             @unique
   title          String
   description    String
   reproduction   String?
   expectedResult String?
   actualResult   String?
-  severity       Severity       @default(MEDIUM)
-  priority       Priority       @default(MEDIUM)
+  severity       Severity           @default(MEDIUM)
+  priority       Priority           @default(MEDIUM)
   environment    String?
   browser        String?
-  status         BugStatus      @default(OPEN)
+  status         BugStatus          @default(OPEN)
   evidenceUrl    String?
   technicalError String?
   assigneeId     Int?
@@ -153,13 +194,14 @@ model Bug {
   projectId      Int?
   scenarioId     Int?
   executionId    Int?
-  assignee       User?          @relation("BugAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
-  reporter       User           @relation("BugReporter", fields: [reporterId], references: [id], onDelete: Restrict)
-  project        Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  scenario       TestScenario?  @relation(fields: [scenarioId], references: [id], onDelete: SetNull)
-  execution      TestExecution? @relation(fields: [executionId], references: [id], onDelete: SetNull)
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  assignee       User?              @relation("BugAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  reporter       User               @relation("BugReporter", fields: [reporterId], references: [id], onDelete: Restrict)
+  project        Project?           @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  scenario       TestScenario?      @relation(fields: [scenarioId], references: [id], onDelete: SetNull)
+  execution      TestExecution?     @relation(fields: [executionId], references: [id], onDelete: SetNull)
+  externalIssues BugExternalIssue[]
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
 
   @@index([status])
   @@index([priority])
@@ -169,6 +211,24 @@ model Bug {
   @@index([scenarioId])
   @@index([executionId])
   @@index([createdAt])
+}
+
+model BugExternalIssue {
+  id           Int                   @id @default(autoincrement())
+  provider     ExternalIssueProvider
+  externalKey  String
+  url          String
+  state        String
+  lastSyncedAt DateTime?
+  lastError    String?
+  metadata     Json?
+  bugId        Int
+  bug          Bug                   @relation(fields: [bugId], references: [id], onDelete: Cascade)
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  @@unique([bugId, provider])
+  @@index([provider, externalKey])
 }
 
 model Project {
@@ -186,8 +246,106 @@ model Project {
   executions    TestExecution[]
   recordings    RecordingSession[]
   bugs          Bug[]
+  testPlans     TestPlan[]
+  testSuites    TestSuite[]
+  members       ProjectMember[]
+  auditLogs     AuditLog[]
+  apiKeys       ProjectApiKey[]
+  github        GitHubIntegration?
+  jira          JiraIntegration?
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
+}
+
+model ProjectMember {
+  projectId Int
+  userId    Int
+  role      ProjectRole @default(VIEWER)
+  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@id([projectId, userId])
+  @@index([userId, role])
+}
+
+model AuditLog {
+  id         Int      @id @default(autoincrement())
+  action     String
+  entityType String
+  entityId   String?
+  details    Json?
+  projectId  Int
+  actorId    Int
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  actor      User     @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  createdAt  DateTime @default(now())
+
+  @@index([projectId, createdAt])
+  @@index([actorId, createdAt])
+}
+
+model ProjectApiKey {
+  id          Int       @id @default(autoincrement())
+  name        String
+  prefix      String    @unique
+  keyHash     String    @unique
+  projectId   Int
+  createdById Int
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy   User      @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([projectId, revokedAt])
+  @@index([expiresAt])
+}
+
+model GitHubIntegration {
+  id              Int       @id @default(autoincrement())
+  projectId       Int       @unique
+  repositoryOwner String
+  repositoryName  String
+  tokenEncrypted  String
+  tokenIv         String
+  tokenTag        String
+  enabled         Boolean   @default(true)
+  createdById     Int
+  project         Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy       User      @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  lastPublishedAt DateTime?
+  lastError       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([enabled])
+  @@index([createdById])
+}
+
+model JiraIntegration {
+  id             Int       @id @default(autoincrement())
+  projectId      Int       @unique
+  siteUrl        String
+  email          String
+  jiraProjectKey String
+  issueType      String    @default("Bug")
+  tokenEncrypted String
+  tokenIv        String
+  tokenTag       String
+  enabled        Boolean   @default(true)
+  createdById    Int
+  project        Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy      User      @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  lastSyncedAt   DateTime?
+  lastError      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([enabled])
+  @@index([createdById])
 }
 
 model Environment {
@@ -198,6 +356,7 @@ model Environment {
   projectId  Int
   project    Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
   executions TestExecution[]
+  testCycles TestCycle[]
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
 
@@ -220,32 +379,34 @@ model Requirement {
 }
 
 model TestScenario {
-  id             Int                @id @default(autoincrement())
-  code           String             @unique
+  id             Int                 @id @default(autoincrement())
+  code           String              @unique
   title          String
   description    String?
   preconditions  String?
-  priority       Priority           @default(MEDIUM)
-  type           ScenarioType       @default(FUNCTIONAL)
-  status         ScenarioStatus     @default(ACTIVE)
-  automated      Boolean            @default(false)
-  timeoutMs      Int                @default(60000)
-  screenshotMode ScreenshotMode     @default(FAILURE)
-  captureVideo   Boolean            @default(true)
-  captureTrace   Boolean            @default(true)
-  captureConsole Boolean            @default(true)
-  captureNetwork Boolean            @default(true)
-  retentionDays  Int                @default(30)
+  priority       Priority            @default(MEDIUM)
+  type           ScenarioType        @default(FUNCTIONAL)
+  status         ScenarioStatus      @default(ACTIVE)
+  automated      Boolean             @default(false)
+  timeoutMs      Int                 @default(60000)
+  screenshotMode ScreenshotMode      @default(FAILURE)
+  captureVideo   Boolean             @default(true)
+  captureTrace   Boolean             @default(true)
+  captureConsole Boolean             @default(true)
+  captureNetwork Boolean             @default(true)
+  retentionDays  Int                 @default(30)
   projectId      Int
   requirementId  Int?
-  project        Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  requirement    Requirement?       @relation(fields: [requirementId], references: [id], onDelete: SetNull)
+  project        Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  requirement    Requirement?        @relation(fields: [requirementId], references: [id], onDelete: SetNull)
   steps          ScenarioStep[]
   executions     TestExecution[]
   recordings     RecordingSession[]
   bugs           Bug[]
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
+  suiteItems     TestSuiteScenario[]
+  cycleItems     TestCycleScenario[]
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
 
   @@index([projectId])
   @@index([requirementId])
@@ -288,6 +449,9 @@ model TestExecution {
   cancelRequestedAt DateTime?
   heartbeatAt       DateTime?
   retryOfId         Int?
+  cycleId           Int?
+  commitSha         String?
+  pipelineSource    String?
   scenarioId        Int
   environmentId     Int
   projectId         Int
@@ -302,6 +466,7 @@ model TestExecution {
   bugs              Bug[]
   retryOf           TestExecution?      @relation("ExecutionRetries", fields: [retryOfId], references: [id], onDelete: SetNull)
   retries           TestExecution[]     @relation("ExecutionRetries")
+  cycle             TestCycle?          @relation(fields: [cycleId], references: [id], onDelete: SetNull)
   startedAt         DateTime?
   finishedAt        DateTime?
   createdAt         DateTime            @default(now())
@@ -311,6 +476,8 @@ model TestExecution {
   @@index([scenarioId])
   @@index([status])
   @@index([retryOfId])
+  @@index([cycleId])
+  @@index([commitSha])
 }
 
 model ExecutionStep {
@@ -393,4 +560,118 @@ model RecordedEvent {
   createdAt DateTime         @default(now())
 
   @@unique([sessionId, order])
+}
+
+model TestPlan {
+  id             Int             @id @default(autoincrement())
+  code           String          @unique
+  name           String
+  description    String?
+  objective      String?
+  releaseVersion String?
+  status         TestPlanStatus  @default(DRAFT)
+  projectId      Int
+  createdById    Int
+  project        Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy      User            @relation("TestPlanCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  suites         TestPlanSuite[]
+  cycles         TestCycle[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([projectId, status])
+  @@index([createdById])
+}
+
+model TestSuite {
+  id          Int                 @id @default(autoincrement())
+  code        String              @unique
+  name        String
+  description String?
+  projectId   Int
+  createdById Int
+  project     Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy   User                @relation("TestSuiteCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  plans       TestPlanSuite[]
+  scenarios   TestSuiteScenario[]
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@index([projectId])
+  @@index([createdById])
+}
+
+model TestPlanSuite {
+  planId    Int
+  suiteId   Int
+  order     Int       @default(1)
+  plan      TestPlan  @relation(fields: [planId], references: [id], onDelete: Cascade)
+  suite     TestSuite @relation(fields: [suiteId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+
+  @@id([planId, suiteId])
+  @@unique([planId, order])
+  @@index([suiteId])
+}
+
+model TestSuiteScenario {
+  suiteId    Int
+  scenarioId Int
+  order      Int          @default(1)
+  suite      TestSuite    @relation(fields: [suiteId], references: [id], onDelete: Cascade)
+  scenario   TestScenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  createdAt  DateTime     @default(now())
+
+  @@id([suiteId, scenarioId])
+  @@unique([suiteId, order])
+  @@index([scenarioId])
+}
+
+model TestCycle {
+  id            Int                 @id @default(autoincrement())
+  code          String              @unique
+  name          String
+  description   String?
+  status        TestCycleStatus     @default(PLANNED)
+  browser       String              @default("chromium")
+  plannedStart  DateTime?
+  plannedEnd    DateTime?
+  scheduledAt   DateTime?
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  planId        Int
+  environmentId Int
+  createdById   Int
+  plan          TestPlan            @relation(fields: [planId], references: [id], onDelete: Cascade)
+  environment   Environment         @relation(fields: [environmentId], references: [id], onDelete: Restrict)
+  createdBy     User                @relation("TestCycleCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  scenarios     TestCycleScenario[]
+  executions    TestExecution[]
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  @@index([planId, status])
+  @@index([status, scheduledAt])
+  @@index([environmentId])
+  @@index([createdById])
+}
+
+model TestCycleScenario {
+  cycleId      Int
+  scenarioId   Int
+  order        Int                 @default(1)
+  result       CycleScenarioResult @default(NOT_RUN)
+  notes        String?
+  executedById Int?
+  executedAt   DateTime?
+  cycle        TestCycle           @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  scenario     TestScenario        @relation(fields: [scenarioId], references: [id], onDelete: Restrict)
+  executedBy   User?               @relation("CycleScenarioExecutor", fields: [executedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @default(now()) @updatedAt
+
+  @@id([cycleId, scenarioId])
+  @@unique([cycleId, order])
+  @@index([scenarioId])
+  @@index([executedById])
 }

@@ -12,6 +12,8 @@ import {
   executionReportInclude
 } from '../services/execution-reports.js';
 import { HttpError } from '../utils/http-error.js';
+import { syncCycleStatus } from '../services/test-cycle.js';
+import { publishExecutionGitHubStatus } from '../services/github-status.js';
 
 export const executionsRouter = Router();
 executionsRouter.use(authenticate);
@@ -24,6 +26,7 @@ executionsRouter.get('/', async (req, res) => {
       scenario: { select: { id: true, code: true, title: true } },
       project: { select: { id: true, code: true, name: true } },
       environment: { select: { id: true, name: true, baseUrl: true } },
+      cycle: { select: { id: true, code: true, name: true, status: true } },
       createdBy: { select: { id: true, name: true } },
       _count: { select: { bugs: true } }
     },
@@ -41,6 +44,9 @@ executionsRouter.get('/:id', async (req, res) => {
       scenario: { include: { requirement: true } },
       project: true,
       environment: true,
+      cycle: {
+        include: { plan: { select: { id: true, code: true, name: true, releaseVersion: true } } }
+      },
       createdBy: { select: { id: true, name: true, email: true } },
       steps: { orderBy: { order: 'asc' } },
       logs: { orderBy: { createdAt: 'asc' } },
@@ -94,6 +100,8 @@ executionsRouter.post('/:id/cancel', async (req, res) => {
   } else {
     await appendExecutionLog(id, 'Cancelamento solicitado pelo usuário.', 'WARN');
   }
+  await syncCycleStatus(execution.cycleId);
+  await publishExecutionGitHubStatus(execution.id);
   res.json(cancelled);
 });
 
@@ -110,7 +118,8 @@ executionsRouter.post('/:id/retry', async (req, res) => {
     environmentId: source.environmentId,
     browser: source.browser,
     createdById: req.user!.id,
-    retryOfId: source.id
+    retryOfId: source.id,
+    cycleId: source.cycleId ?? undefined
   });
   res.status(201).json(execution);
 });

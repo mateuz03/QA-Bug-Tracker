@@ -1,8 +1,8 @@
-import { ArrowLeft, Check, Save } from 'lucide-react';
+import { ArrowLeft, Check, ClipboardList, ExternalLink, Github, RefreshCw, Save } from 'lucide-react';
 import { FormEvent, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError } from '../services/api';
-import type { BugPayload, BugStatus, Priority, Project, Severity, TestScenario, User } from '../types';
+import type { BugExternalIssue, BugPayload, BugStatus, Priority, Project, Severity, TestScenario, User } from '../types';
 
 const initialForm: BugPayload = {
   title: '',
@@ -32,6 +32,10 @@ export function BugFormPage() {
   const [scenarios, setScenarios] = useState<TestScenario[]>([]);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [githubIssue, setGithubIssue] = useState<BugExternalIssue | null>(null);
+  const [syncingGithub, setSyncingGithub] = useState(false);
+  const [jiraIssue, setJiraIssue] = useState<BugExternalIssue | null>(null);
+  const [syncingJira, setSyncingJira] = useState(false);
   const editing = Boolean(id);
 
   useEffect(() => {
@@ -39,24 +43,28 @@ export function BugFormPage() {
     api.projects().then(setProjects).catch(() => undefined);
     api.scenarios().then(setScenarios).catch(() => undefined);
     if (id) {
-      api.bug(Number(id)).then((bug) => setForm({
-        title: bug.title,
-        description: bug.description,
-        reproduction: bug.reproduction ?? '',
-        expectedResult: bug.expectedResult ?? '',
-        actualResult: bug.actualResult ?? '',
-        severity: bug.severity,
-        priority: bug.priority,
-        environment: bug.environment ?? '',
-        browser: bug.browser ?? '',
-        status: bug.status,
-        evidenceUrl: bug.evidenceUrl ?? '',
-        technicalError: bug.technicalError ?? '',
-        assigneeId: bug.assigneeId ?? null,
-        projectId: bug.projectId ?? null,
-        scenarioId: bug.scenarioId ?? null,
-        executionId: bug.executionId ?? null
-      })).catch(() => setError('Bug não encontrado.'));
+      api.bug(Number(id)).then((bug) => {
+        setForm({
+          title: bug.title,
+          description: bug.description,
+          reproduction: bug.reproduction ?? '',
+          expectedResult: bug.expectedResult ?? '',
+          actualResult: bug.actualResult ?? '',
+          severity: bug.severity,
+          priority: bug.priority,
+          environment: bug.environment ?? '',
+          browser: bug.browser ?? '',
+          status: bug.status,
+          evidenceUrl: bug.evidenceUrl ?? '',
+          technicalError: bug.technicalError ?? '',
+          assigneeId: bug.assigneeId ?? null,
+          projectId: bug.projectId ?? null,
+          scenarioId: bug.scenarioId ?? null,
+          executionId: bug.executionId ?? null
+        });
+        setGithubIssue(bug.externalIssues?.find((item) => item.provider === 'GITHUB') ?? null);
+        setJiraIssue(bug.externalIssues?.find((item) => item.provider === 'JIRA') ?? null);
+      }).catch(() => setError('Bug não encontrado.'));
     }
   }, [id]);
 
@@ -78,12 +86,52 @@ export function BugFormPage() {
     }
   }
 
+  async function syncWithGitHub() {
+    setSyncingGithub(true);
+    setError('');
+    try {
+      setGithubIssue(await api.syncBugToGitHub(Number(id)));
+    } catch (requestError) {
+      setError(requestError instanceof ApiError ? requestError.message : 'Não foi possível sincronizar com o GitHub.');
+    } finally {
+      setSyncingGithub(false);
+    }
+  }
+
+  async function syncWithJira() {
+    setSyncingJira(true);
+    setError('');
+    try {
+      setJiraIssue(await api.syncBugToJira(Number(id)));
+    } catch (requestError) {
+      setError(requestError instanceof ApiError ? requestError.message : 'Não foi possível sincronizar com o Jira.');
+    } finally {
+      setSyncingJira(false);
+    }
+  }
+
   return (
     <div className="page form-page">
       <Link className="back-link" to="/bugs"><ArrowLeft size={17} /> Voltar para ocorrências</Link>
       <div className="page-heading">
         <div><p className="eyebrow">{editing ? 'Atualização' : 'Nova ocorrência'}</p><h1>{editing ? 'Editar bug' : 'Registrar novo bug'}</h1><p>Inclua contexto suficiente para que qualquer pessoa consiga reproduzir e validar.</p></div>
       </div>
+      {editing && (
+        <div className="bug-external-integrations">
+          <section className="panel bug-github-panel">
+            <span className="bug-github-icon"><Github /></span>
+            <div><strong>{githubIssue ? `GitHub Issue #${githubIssue.externalKey}` : 'GitHub Issues'}</strong><p>{githubIssue ? `Estado ${githubIssue.state} · última sincronização ${githubIssue.lastSyncedAt ? new Date(githubIssue.lastSyncedAt).toLocaleString('pt-BR') : 'não informada'}` : 'Crie uma issue com descrição, reprodução, evidências e rastreabilidade deste bug.'}</p>{githubIssue?.lastError && <small>{githubIssue.lastError}</small>}</div>
+            {githubIssue && <a className="button button-secondary" href={githubIssue.url} target="_blank" rel="noreferrer"><ExternalLink size={15} /> Abrir issue</a>}
+            <button type="button" className="button button-primary" disabled={syncingGithub || !form.projectId} onClick={() => void syncWithGitHub()}>{syncingGithub ? <RefreshCw className="spin" size={15} /> : <Github size={15} />} {githubIssue ? 'Sincronizar' : 'Criar no GitHub'}</button>
+          </section>
+          <section className="panel bug-github-panel bug-jira-panel">
+            <span className="bug-github-icon"><ClipboardList /></span>
+            <div><strong>{jiraIssue ? `Jira ${jiraIssue.externalKey}` : 'Jira Cloud'}</strong><p>{jiraIssue ? `Sincronizado em ${jiraIssue.lastSyncedAt ? new Date(jiraIssue.lastSyncedAt).toLocaleString('pt-BR') : 'data não informada'}` : 'Envie o bug em ADF com rastreabilidade, contexto técnico e evidências.'}</p>{jiraIssue?.lastError && <small>{jiraIssue.lastError}</small>}</div>
+            {jiraIssue && <a className="button button-secondary" href={jiraIssue.url} target="_blank" rel="noreferrer"><ExternalLink size={15} /> Abrir no Jira</a>}
+            <button type="button" className="button button-primary" disabled={syncingJira || !form.projectId} onClick={() => void syncWithJira()}>{syncingJira ? <RefreshCw className="spin" size={15} /> : <ClipboardList size={15} />} {jiraIssue ? 'Sincronizar' : 'Criar no Jira'}</button>
+          </section>
+        </div>
+      )}
       <form onSubmit={submit}>
         {error && <div className="alert alert-error" role="alert">{error}</div>}
         <section className="panel form-section">

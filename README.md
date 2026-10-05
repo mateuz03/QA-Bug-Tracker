@@ -6,7 +6,9 @@
 ![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=111)
 ![Playwright](https://img.shields.io/badge/Playwright-E2E-2EAD33?logo=playwright&logoColor=white)
 
-Plataforma full stack de gestão e automação de qualidade. O produto conecta requisitos, cenários, gravações, execuções Playwright, evidências e bugs em uma única cadeia rastreável.
+**QA Truker** é uma plataforma full stack de gestão e automação de qualidade. O produto conecta requisitos, cenários, gravações, execuções Playwright, evidências e bugs em uma única cadeia rastreável.
+
+> Projeto pessoal criado para demonstrar engenharia de qualidade, automação de testes e desenvolvimento full stack aplicados a um produto completo.
 
 ```text
 Projeto → Requisito → Cenário → Execução → Evidência → Bug → Reteste
@@ -22,12 +24,31 @@ Projeto → Requisito → Cenário → Execução → Evidência → Bug → Ret
 - Rastreabilidade ponta a ponta entre projeto, requisito, cenário, execução, evidência e bug.
 - Quality Gate com lint, build e testes automatizados no GitHub Actions.
 
+## Demonstração em 3 minutos
+
+1. Entre com o usuário administrador de demonstração.
+2. Abra o projeto **QA Truker** e confira requisitos e cobertura.
+3. Execute o cenário `CT-001 — Login com usuário válido`.
+4. Acompanhe o worker, os passos e as evidências produzidas.
+5. A partir de uma execução reprovada, gere um bug já preenchido e rastreável.
+
+O roteiro completo está em [Roteiro de demonstração](docs/roteiro-demonstracao.md). As decisões que orientam a arquitetura estão registradas em [Decisões técnicas](docs/decisoes-tecnicas.md).
+
 ## MVP implementado
 
 - Login, proteção de rotas e perfis administrador/analista.
 - Projetos com responsável, repositório e múltiplos ambientes.
 - Requisitos com indicador de cobertura.
 - Cenários manuais ou automatizados com passos neutros.
+- Suítes reutilizáveis, planos por versão e ciclos de regressão.
+- Execuções em lote vinculadas ao ciclo que as originou.
+- Painel detalhado do ciclo com resultados automáticos e manuais.
+- Fechamento automático quando todos os cenários recebem resultado final.
+- Edição de planos e suítes com preservação dos ciclos já criados.
+- Comparação entre ciclos com taxa de aprovação, regressões e melhorias.
+- Agendamento, reagendamento e início automático de ciclos pelo worker.
+- Controle de acesso por projeto com papéis de proprietário, gestor e leitor.
+- Trilha de auditoria para criação de projetos, requisitos e alterações de membros.
 - Ações de navegação, preenchimento, clique, seleção e validação.
 - Worker Playwright com Chromium, Firefox e WebKit.
 - Fila persistida no banco com worker executado em processo separado.
@@ -155,7 +176,24 @@ Relatórios, screenshots, vídeos e traces ficam em `playwright-report/` e `test
 | POST | `/api/auth/login` | Autenticar |
 | GET/POST | `/api/projects` | Projetos |
 | POST | `/api/projects/:id/requirements` | Requisitos |
+| GET | `/api/projects/:id/members` | Listar equipe e papéis do projeto |
+| PUT/DELETE | `/api/projects/:id/members/:userId` | Conceder, alterar ou remover acesso |
+| GET | `/api/projects/:id/audit` | Consultar trilha de auditoria |
+| GET/POST | `/api/projects/:id/api-keys` | Listar ou criar chaves de integração |
+| DELETE | `/api/projects/:id/api-keys/:keyId` | Revogar uma chave de integração |
+| POST | `/api/pipeline/executions` | Disparar cenário por pipeline externo |
+| GET | `/api/pipeline/executions/:code` | Consultar resultado com chave do projeto |
 | GET/POST | `/api/scenarios` | Cenários e passos |
+| GET/POST | `/api/test-plans` | Planos de teste por projeto e versão |
+| GET/POST | `/api/test-plans/suites` | Suítes reutilizáveis |
+| PUT | `/api/test-plans/:id` | Atualizar plano, status e suítes vinculadas |
+| PUT | `/api/test-plans/suites/:id` | Atualizar suíte e seus cenários |
+| GET | `/api/test-plans/:id/comparison` | Comparar resultados de dois ciclos |
+| POST | `/api/test-plans/:id/cycles` | Criar ciclo de regressão |
+| GET | `/api/test-plans/cycles/:id` | Acompanhar progresso e resultados do ciclo |
+| POST | `/api/test-plans/cycles/:id/start` | Executar cenários automatizados do ciclo |
+| PATCH | `/api/test-plans/cycles/:id/schedule` | Agendar, reagendar ou remover o agendamento |
+| PATCH | `/api/test-plans/cycles/:id/scenarios/:scenarioId` | Registrar resultado manual |
 | POST | `/api/executions` | Adicionar cenário à fila |
 | GET | `/api/executions/:id` | Resultado e evidências |
 | POST | `/api/executions/:id/cancel` | Cancelar execução |
@@ -170,6 +208,8 @@ Relatórios, screenshots, vídeos e traces ficam em `playwright-report/` e `test
 | POST | `/api/recordings/:id/events` | Receber evento |
 | PATCH | `/api/recordings/:id/finish` | Converter gravação em cenário |
 | GET/POST | `/api/bugs` | Gestão de bugs |
+| POST | `/api/bugs/:id/github-sync` | Criar ou atualizar o GitHub Issue vinculado |
+| POST | `/api/bugs/:id/jira-sync` | Criar ou atualizar a issue vinculada no Jira Cloud |
 
 ## Documentação
 
@@ -179,13 +219,21 @@ Relatórios, screenshots, vídeos e traces ficam em `playwright-report/` e `test
 - [Cenários BDD](docs/cenarios-bdd.md)
 - [Estratégia de automação](docs/estrategia-de-automacao.md)
 - [Relatório de execução](docs/relatorio-de-execucao.md)
+- [Roteiro de demonstração](docs/roteiro-demonstracao.md)
+- [Decisões técnicas](docs/decisoes-tecnicas.md)
+- [Plano de publicação](docs/plano-de-publicacao.md)
+- [Integração com pipelines](docs/integracao-pipelines.md)
+
+## Como contribuir
+
+Consulte o [guia de contribuição](CONTRIBUTING.md) para preparar o ambiente, criar uma branch e validar uma alteração. A evolução do produto é registrada no [changelog](CHANGELOG.md).
 
 ## Limites conscientes do MVP
 
 - A fila usa SQLite e processa uma execução por worker; escala horizontal exige PostgreSQL e um broker como Redis.
 - Evidências ficam no filesystem local com metadados no banco; a evolução indicada é Storage compatível com S3.
 - A extensão usa um token inserido pelo usuário; uma versão publicada deve usar autenticação dedicada e restringir o ID da extensão.
-- Agendamento, planos/ciclos, histórico de versões e atualização via WebSocket são as próximas etapas.
+- Atualizações em tempo real ainda usam polling; WebSocket ou SSE é a evolução indicada para produção.
 
 ## Roadmap
 
@@ -193,10 +241,26 @@ Relatórios, screenshots, vídeos e traces ficam em `playwright-report/` e `test
 - [x] Fila assíncrona e worker Playwright
 - [x] Evidências avançadas e relatórios PDF/CSV
 - [x] Gravador inicial para Chrome
-- [ ] Planos, ciclos e suítes de regressão
+- [x] Planos, ciclos e suítes de regressão
+- [x] Resultados manuais e painel consolidado do ciclo
+- [x] Edição de planos e suítes reutilizáveis
+- [x] Comparação entre ciclos e detecção de regressões
+- [x] Agendamento de ciclos de regressão
 - [ ] PostgreSQL, object storage e execução distribuída
 - [ ] RBAC por projeto e trilha de auditoria
+  - [x] Papéis de proprietário, gestor e leitor
+  - [x] Isolamento da listagem, detalhe e requisitos por projeto
+  - [x] Gestão visual de membros e histórico administrativo
+  - [ ] Aplicar as permissões aos cenários, execuções, bugs, gravações e planos
+  - [ ] Ampliar a auditoria para todas as mutações do produto
 - [ ] Integrações com GitHub, Jira e pipelines externos
+  - [x] Chaves de integração por projeto com hash, expiração e revogação
+  - [x] Disparo e consulta de execuções por pipeline externo
+  - [x] Exemplo documentado para GitHub Actions
+  - [x] Publicar o resultado como status de commit no GitHub
+  - [x] Criar e sincronizar issues no GitHub
+  - [x] Criar e sincronizar issues no Jira
+  - [ ] Webhooks assinados para eventos externos
 
 ## Autor
 
