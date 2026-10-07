@@ -1,8 +1,8 @@
-import { ArrowLeft, Bug, CirclePlay, ClipboardList, Copy, ExternalLink, FlaskConical, Github, Globe2, History, KeyRound, Plus, ShieldCheck, Trash2, Unplug, UserPlus, Users } from 'lucide-react';
+import { ArrowLeft, Bug, CirclePlay, ClipboardList, Copy, ExternalLink, FlaskConical, Github, Globe2, History, KeyRound, Plus, ShieldCheck, Trash2, Unplug, UserPlus, Users, Webhook } from 'lucide-react';
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, ApiError } from '../services/api';
-import type { AuditLog, GitHubIntegration, JiraIntegration, Project, ProjectApiKey, ProjectRole, User } from '../types';
+import type { AuditLog, GitHubIntegration, JiraIntegration, Project, ProjectApiKey, ProjectRole, ProjectWebhook, User } from '../types';
 
 const projectRoleLabels: Record<ProjectRole, string> = { OWNER: 'Proprietário', MANAGER: 'Gestor', VIEWER: 'Leitor' };
 const auditActionLabels: Record<string, string> = {
@@ -20,7 +20,12 @@ const auditActionLabels: Record<string, string> = {
   JIRA_INTEGRATION_CREATED: 'conectou o projeto ao Jira',
   JIRA_INTEGRATION_UPDATED: 'atualizou a integração com Jira',
   JIRA_INTEGRATION_REMOVED: 'removeu a integração com Jira',
-  BUG_JIRA_SYNCED: 'sincronizou um bug com Jira'
+  BUG_JIRA_SYNCED: 'sincronizou um bug com Jira',
+  PROJECT_WEBHOOK_CREATED: 'criou um webhook de pipeline',
+  PROJECT_WEBHOOK_UPDATED: 'atualizou o webhook de pipeline',
+  PROJECT_WEBHOOK_SECRET_ROTATED: 'rotacionou o segredo do webhook',
+  PROJECT_WEBHOOK_REMOVED: 'removeu o webhook de pipeline',
+  WEBHOOK_EXECUTION_COMPLETED: 'recebeu o resultado de uma execução por webhook'
 };
 
 export function ProjectDetailPage() {
@@ -42,6 +47,9 @@ export function ProjectDetailPage() {
   const [jiraIntegration, setJiraIntegration] = useState<JiraIntegration | null>(null);
   const [jiraForm, setJiraForm] = useState({ siteUrl: '', email: '', projectKey: '', issueType: 'Bug', token: '', enabled: true });
   const [savingJira, setSavingJira] = useState(false);
+  const [projectWebhook, setProjectWebhook] = useState<ProjectWebhook | null>(null);
+  const [generatedWebhookSecret, setGeneratedWebhookSecret] = useState('');
+  const [savingWebhook, setSavingWebhook] = useState(false);
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
@@ -49,18 +57,20 @@ export function ProjectDetailPage() {
       const data = await api.project(Number(id));
       setProject(data);
       if (data.currentUserRole === 'OWNER' || data.currentUserRole === 'MANAGER') {
-        const [logs, userData, keyData, githubData, jiraData] = await Promise.all([
+        const [logs, userData, keyData, githubData, jiraData, webhookData] = await Promise.all([
           api.projectAudit(Number(id)),
           data.currentUserRole === 'OWNER' ? api.users() : Promise.resolve([]),
           data.currentUserRole === 'OWNER' ? api.projectApiKeys(Number(id)) : Promise.resolve([]),
           data.currentUserRole === 'OWNER' ? api.githubIntegration(Number(id)) : Promise.resolve(null),
-          data.currentUserRole === 'OWNER' ? api.jiraIntegration(Number(id)) : Promise.resolve(null)
+          data.currentUserRole === 'OWNER' ? api.jiraIntegration(Number(id)) : Promise.resolve(null),
+          data.currentUserRole === 'OWNER' ? api.projectWebhook(Number(id)) : Promise.resolve(null)
         ]);
         setAuditLogs(logs);
         setUsers(userData);
         setApiKeys(keyData);
         setGithubIntegration(githubData);
         setJiraIntegration(jiraData);
+        setProjectWebhook(webhookData);
         if (githubData) {
           setGithubForm({
             repository: `${githubData.repositoryOwner}/${githubData.repositoryName}`,
@@ -229,6 +239,53 @@ export function ProjectDetailPage() {
     }
   }
 
+  async function saveProjectWebhook(rotateSecret = false) {
+    setSavingWebhook(true);
+    setError('');
+    try {
+      const saved = await api.updateProjectWebhook(Number(id), {
+        enabled: projectWebhook?.enabled ?? true,
+        rotateSecret
+      });
+      setProjectWebhook(saved);
+      if (saved.secret) setGeneratedWebhookSecret(saved.secret);
+      await load();
+    } catch (requestError) {
+      setError(requestError instanceof ApiError ? requestError.message : 'Não foi possível configurar o webhook.');
+    } finally {
+      setSavingWebhook(false);
+    }
+  }
+
+  async function toggleProjectWebhook() {
+    if (!projectWebhook) return;
+    setSavingWebhook(true);
+    setError('');
+    try {
+      await api.updateProjectWebhook(Number(id), { enabled: !projectWebhook.enabled });
+      await load();
+    } catch (requestError) {
+      setError(requestError instanceof ApiError ? requestError.message : 'Não foi possível atualizar o webhook.');
+    } finally {
+      setSavingWebhook(false);
+    }
+  }
+
+  async function removeProjectWebhook() {
+    setSavingWebhook(true);
+    setError('');
+    try {
+      await api.removeProjectWebhook(Number(id));
+      setProjectWebhook(null);
+      setGeneratedWebhookSecret('');
+      await load();
+    } catch (requestError) {
+      setError(requestError instanceof ApiError ? requestError.message : 'Não foi possível remover o webhook.');
+    } finally {
+      setSavingWebhook(false);
+    }
+  }
+
   if (!project) return <div className="page"><div className={error ? 'alert alert-error' : 'page-loading'}>{error || 'Carregando projeto...'}</div></div>;
 
   const canManage = project.currentUserRole === 'OWNER' || project.currentUserRole === 'MANAGER';
@@ -301,6 +358,16 @@ export function ProjectDetailPage() {
             </form>
             {jiraIntegration && <div className="github-integration-meta"><span>Projeto Jira<strong>{jiraIntegration.jiraProjectKey} · {jiraIntegration.issueType}</strong></span><span>Última sincronização<strong>{jiraIntegration.lastSyncedAt ? new Date(jiraIntegration.lastSyncedAt).toLocaleString('pt-BR') : 'Ainda não sincronizado'}</strong></span>{jiraIntegration.lastError && <span className="github-integration-error">Último erro<strong>{jiraIntegration.lastError}</strong></span>}</div>}
           </div>
+          <div className="github-integration-card webhook-integration-card">
+            <div className="github-integration-heading"><span><Webhook /></span><div><strong>Webhook assinado do pipeline</strong><p>Recebe resultados externos com HMAC SHA-256, timestamp e proteção contra entregas repetidas.</p></div>{projectWebhook && <span className={projectWebhook.enabled ? 'integration-enabled' : 'integration-disabled'}>{projectWebhook.enabled ? 'Ativo' : 'Pausado'}</span>}</div>
+            <div className="webhook-integration-body">
+              <code>POST /api/webhooks/projects/{project.id}/pipeline</code>
+              <p>Envie os cabeçalhos <code>x-qa-signature-256</code>, <code>x-qa-timestamp</code> e <code>x-qa-delivery</code>.</p>
+              <div><button type="button" className="button button-primary" disabled={savingWebhook} onClick={() => void saveProjectWebhook()}><Webhook size={15} /> {projectWebhook ? 'Salvar webhook' : 'Gerar webhook'}</button>{projectWebhook && <><button type="button" className="button button-secondary" disabled={savingWebhook} onClick={() => void toggleProjectWebhook()}>{projectWebhook.enabled ? 'Pausar' : 'Ativar'}</button><button type="button" className="button button-secondary" disabled={savingWebhook} onClick={() => void saveProjectWebhook(true)}><KeyRound size={15} /> Rotacionar segredo</button><button type="button" className="button button-secondary" disabled={savingWebhook} onClick={() => void removeProjectWebhook()}><Unplug size={15} /> Remover</button></>}</div>
+            </div>
+            {projectWebhook && <div className="github-integration-meta"><span>Última entrega<strong>{projectWebhook.lastDeliveredAt ? new Date(projectWebhook.lastDeliveredAt).toLocaleString('pt-BR') : 'Nenhuma entrega recebida'}</strong></span><span>Segurança<strong>HMAC SHA-256 · janela de 5 min.</strong></span>{projectWebhook.lastError && <span className="github-integration-error">Último erro<strong>{projectWebhook.lastError}</strong></span>}</div>}
+          </div>
+          {generatedWebhookSecret && <div className="generated-token" role="status"><div><strong>Copie o segredo do webhook agora</strong><span>Ele não será exibido novamente.</span></div><code>{generatedWebhookSecret}</code><button className="button button-secondary" onClick={() => void navigator.clipboard.writeText(generatedWebhookSecret)}><Copy size={15} /> Copiar</button></div>}
           {generatedToken && <div className="generated-token" role="status"><div><strong>Copie esta chave agora</strong><span>Ela não será exibida novamente.</span></div><code>{generatedToken}</code><button className="button button-secondary" onClick={() => void navigator.clipboard.writeText(generatedToken)}><Copy size={15} /> Copiar</button></div>}
           <form className="api-key-form" onSubmit={createApiKey}><label>Nome<input required minLength={3} value={keyForm.name} onChange={(event) => setKeyForm({ ...keyForm, name: event.target.value })} placeholder="GitHub Actions · main" /></label><label>Expira em (opcional)<input type="date" value={keyForm.expiresAt} onChange={(event) => setKeyForm({ ...keyForm, expiresAt: event.target.value })} /></label><button className="button button-primary" disabled={savingKey}><KeyRound size={15} /> Gerar chave</button></form>
           <div className="api-key-list">{apiKeys.length === 0 ? <p className="muted">Nenhuma chave criada para este projeto.</p> : apiKeys.map((key) => <div key={key.id} className={key.revokedAt ? 'api-key-revoked' : ''}><span className="integration-key-icon"><KeyRound /></span><div><strong>{key.name}</strong><code>{key.prefix}••••••••</code><small>Criada por {key.createdBy.name} · {new Date(key.createdAt).toLocaleDateString('pt-BR')}{key.lastUsedAt ? ` · último uso ${new Date(key.lastUsedAt).toLocaleString('pt-BR')}` : ' · nunca utilizada'}{key.expiresAt ? ` · expira ${new Date(key.expiresAt).toLocaleDateString('pt-BR')}` : ''}</small></div><span className="api-key-status">{key.revokedAt ? 'Revogada' : 'Ativa'}</span>{!key.revokedAt && <button className="button button-secondary button-small" disabled={savingKey} onClick={() => void revokeApiKey(key.id)}><Trash2 size={14} /> Revogar</button>}</div>)}</div>

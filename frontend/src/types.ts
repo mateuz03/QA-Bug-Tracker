@@ -202,6 +202,17 @@ export type JiraIntegration = {
   createdBy?: Pick<User, 'id' | 'name' | 'email'>;
 };
 
+export type ProjectWebhook = {
+  id: number;
+  enabled: boolean;
+  lastDeliveredAt?: string | null;
+  lastError?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  createdBy?: Pick<User, 'id' | 'name' | 'email'>;
+  secret?: string;
+};
+
 export type ScenarioStep = {
   id?: number;
   order?: number;

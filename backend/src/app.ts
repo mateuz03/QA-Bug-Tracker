@@ -13,6 +13,7 @@ import { scenariosRouter } from './routes/scenarios.js';
 import { usersRouter } from './routes/users.js';
 import { testPlansRouter } from './routes/test-plans.js';
 import { pipelineRouter } from './routes/pipeline.js';
+import { webhooksRouter } from './routes/webhooks.js';
 
 export const app = express();
 
@@ -28,7 +29,13 @@ app.use(cors({
     else callback(new Error('Origem não permitida.'));
   }
 }));
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({
+  limit: '1mb',
+  verify(req, _res, buffer) {
+    const request = req as express.Request;
+    if (request.originalUrl.startsWith('/api/webhooks/')) request.rawBody = Buffer.from(buffer);
+  }
+}));
 app.use('/evidences', express.static(fileURLToPath(new URL('../storage', import.meta.url))));
 
 app.get('/api/health', (_req, res) => {
@@ -44,5 +51,6 @@ app.use('/api/executions', executionsRouter);
 app.use('/api/recordings', recordingsRouter);
 app.use('/api/test-plans', testPlansRouter);
 app.use('/api/pipeline', pipelineRouter);
+app.use('/api/webhooks', webhooksRouter);
 app.use((_req, res) => res.status(404).json({ message: 'Rota não encontrada.' }));
 app.use(errorHandler);

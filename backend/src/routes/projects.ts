@@ -7,6 +7,7 @@ import { authenticate, authorize } from '../middleware/auth.js';
 import { accessibleProjectsWhere, recordAudit, requireProjectRole } from '../services/project-access.js';
 import { createProjectApiKeyValue } from '../services/project-api-key.js';
 import { encryptSecret } from '../services/secret-crypto.js';
+import { createWebhookSecret } from '../services/webhook-signing.js';
 import { HttpError } from '../utils/http-error.js';
 
 export const projectsRouter = Router();
@@ -527,6 +528,95 @@ projectsRouter.delete('/:id/jira-integration', async (req, res) => {
     entityType: 'JIRA_INTEGRATION',
     entityId: integration.id,
     details: { siteUrl: integration.siteUrl, projectKey: integration.jiraProjectKey }
+  });
+  res.status(204).send();
+});
+
+projectsRouter.get('/:id/webhook', async (req, res) => {
+  const projectId = z.coerce.number().int().positive().parse(req.params.id);
+  await requireProjectRole(req.user!, projectId, ProjectRole.OWNER);
+  const webhook = await prisma.projectWebhook.findUnique({
+    where: { projectId },
+    select: {
+      id: true,
+      enabled: true,
+      lastDeliveredAt: true,
+      lastError: true,
+      createdAt: true,
+      updatedAt: true,
+      createdBy: { select: { id: true, name: true, email: true } }
+    }
+  });
+  res.json(webhook);
+});
+
+const webhookSchema = z.object({
+  enabled: z.boolean().default(true),
+  rotateSecret: z.boolean().default(false)
+});
+
+projectsRouter.put('/:id/webhook', async (req, res) => {
+  const projectId = z.coerce.number().int().positive().parse(req.params.id);
+  const data = webhookSchema.parse(req.body);
+  await requireProjectRole(req.user!, projectId, ProjectRole.OWNER);
+  const existing = await prisma.projectWebhook.findUnique({ where: { projectId } });
+  const secret = !existing || data.rotateSecret ? createWebhookSecret() : null;
+  const encrypted = secret ? encryptSecret(secret) : null;
+  const webhook = existing
+    ? await prisma.projectWebhook.update({
+      where: { id: existing.id },
+      data: {
+        enabled: data.enabled,
+        lastError: null,
+        ...(encrypted ? {
+          secretEncrypted: encrypted.encrypted,
+          secretIv: encrypted.iv,
+          secretTag: encrypted.tag
+        } : {})
+      }
+    })
+    : await prisma.projectWebhook.create({
+      data: {
+        projectId,
+        enabled: data.enabled,
+        createdById: req.user!.id,
+        secretEncrypted: encrypted!.encrypted,
+        secretIv: encrypted!.iv,
+        secretTag: encrypted!.tag
+      }
+    });
+  await recordAudit({
+    projectId,
+    actorId: req.user!.id,
+    action: existing ? (secret ? 'PROJECT_WEBHOOK_SECRET_ROTATED' : 'PROJECT_WEBHOOK_UPDATED') : 'PROJECT_WEBHOOK_CREATED',
+    entityType: 'PROJECT_WEBHOOK',
+    entityId: webhook.id,
+    details: { enabled: webhook.enabled, secretRotated: Boolean(secret) }
+  });
+  res.json({
+    id: webhook.id,
+    enabled: webhook.enabled,
+    lastDeliveredAt: webhook.lastDeliveredAt,
+    lastError: webhook.lastError,
+    createdAt: webhook.createdAt,
+    updatedAt: webhook.updatedAt,
+    ...(secret ? { secret } : {})
+  });
+});
+
+projectsRouter.delete('/:id/webhook', async (req, res) => {
+  const projectId = z.coerce.number().int().positive().parse(req.params.id);
+  await requireProjectRole(req.user!, projectId, ProjectRole.OWNER);
+  const webhook = await prisma.projectWebhook.findUnique({ where: { projectId } });
+  if (!webhook) throw new HttpError(404, 'Webhook do projeto não encontrado.');
+  await prisma.projectWebhook.delete({ where: { id: webhook.id } });
+  await recordAudit({
+    projectId,
+    actorId: req.user!.id,
+    action: 'PROJECT_WEBHOOK_REMOVED',
+    entityType: 'PROJECT_WEBHOOK',
+    entityId: webhook.id,
+    details: {}
   });
   res.status(204).send();
 });

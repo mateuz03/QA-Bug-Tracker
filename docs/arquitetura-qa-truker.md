@@ -56,6 +56,8 @@ A configuração opcional `GitHubIntegration` mantém o token cifrado com AES-25
 
 `JiraIntegration` mantém URL do site, conta, projeto e tipo de issue, enquanto o API token usa a mesma cifra AES-256-GCM das demais credenciais. O adaptador aceita apenas sites HTTPS `*.atlassian.net`, usa a API REST v3 e produz descrições em Atlassian Document Format. Transições não são automatizadas porque cada projeto pode definir seu próprio workflow; a sincronização atualiza somente os campos portáveis e preserva o estado controlado no Jira.
 
+`ProjectWebhook` fornece uma entrada segura para resultados de pipelines externos. O segredo aleatório é cifrado com AES-256-GCM, apresentado somente na geração ou rotação e assina o corpo original com HMAC SHA-256 junto de um timestamp. `WebhookDelivery` guarda identificador, hash do payload, evento e resultado de processamento para impedir replay por projeto sem armazenar o conteúdo recebido. Apenas resultados finais de execuções originadas por pipeline são aceitos; o processamento atualiza a execução, cria log, registra auditoria e publica o status do commit quando aplicável.
+
 ## Modelo de passo
 
 | Ação | Target | Value | Expected |

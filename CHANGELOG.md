@@ -40,6 +40,8 @@ Todas as mudanças relevantes do QA Truker serão registradas neste arquivo. O f
 - Configuração segura do Jira Cloud por projeto com URL, conta, chave, tipo de issue e API token cifrado.
 - Criação e atualização de issues no Jira REST API v3 usando Atlassian Document Format.
 - Controle visual, RBAC e auditoria para a sincronização de bugs com Jira.
+- Webhook de pipeline por projeto com segredo cifrado, assinatura HMAC SHA-256, timestamp e prevenção de replay.
+- Recebimento de resultados externos de execução com atualização de status, auditoria e publicação de status no GitHub quando configurada.
 
 ### Corrigido
 

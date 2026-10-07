@@ -12,6 +12,7 @@ import type {
   ProjectApiKey,
   GitHubIntegration,
   JiraIntegration,
+  ProjectWebhook,
   RecordingSession,
   Requirement,
   ScenarioPayload,
@@ -137,6 +138,15 @@ export const api = {
     }),
   removeJiraIntegration: (projectId: number) =>
     request<void>(`/projects/${projectId}/jira-integration`, { method: 'DELETE' }),
+  projectWebhook: (projectId: number) =>
+    request<ProjectWebhook | null>(`/projects/${projectId}/webhook`),
+  updateProjectWebhook: (projectId: number, payload: { enabled: boolean; rotateSecret?: boolean }) =>
+    request<ProjectWebhook>(`/projects/${projectId}/webhook`, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    }),
+  removeProjectWebhook: (projectId: number) =>
+    request<void>(`/projects/${projectId}/webhook`, { method: 'DELETE' }),
   createProject: (payload: {
     name: string;
     description?: string;

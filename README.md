@@ -210,6 +210,7 @@ Relatórios, screenshots, vídeos e traces ficam em `playwright-report/` e `test
 | GET/POST | `/api/bugs` | Gestão de bugs |
 | POST | `/api/bugs/:id/github-sync` | Criar ou atualizar o GitHub Issue vinculado |
 | POST | `/api/bugs/:id/jira-sync` | Criar ou atualizar a issue vinculada no Jira Cloud |
+| POST | `/api/webhooks/projects/:id/pipeline` | Receber resultado assinado de um pipeline externo |
 
 ## Documentação
 
@@ -260,7 +261,7 @@ Consulte o [guia de contribuição](CONTRIBUTING.md) para preparar o ambiente, c
   - [x] Publicar o resultado como status de commit no GitHub
   - [x] Criar e sincronizar issues no GitHub
   - [x] Criar e sincronizar issues no Jira
-  - [ ] Webhooks assinados para eventos externos
+  - [x] Webhooks assinados para eventos externos
 
 ## Autor
 

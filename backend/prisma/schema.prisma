@@ -148,6 +148,12 @@ enum ExternalIssueProvider {
   JIRA
 }
 
+enum WebhookDeliveryStatus {
+  ACCEPTED
+  REJECTED
+  DUPLICATE
+}
+
 model User {
   id                     Int                 @id @default(autoincrement())
   name                   String
@@ -170,6 +176,7 @@ model User {
   createdProjectApiKeys  ProjectApiKey[]
   configuredGitHub       GitHubIntegration[]
   configuredJira         JiraIntegration[]
+  configuredWebhooks     ProjectWebhook[]
   createdAt              DateTime            @default(now())
   updatedAt              DateTime            @updatedAt
 }
@@ -232,29 +239,31 @@ model BugExternalIssue {
 }
 
 model Project {
-  id            Int                @id @default(autoincrement())
-  code          String             @unique
-  name          String
-  description   String?
-  repositoryUrl String?
-  status        ProjectStatus      @default(ACTIVE)
-  ownerId       Int
-  owner         User               @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Restrict)
-  environments  Environment[]
-  requirements  Requirement[]
-  scenarios     TestScenario[]
-  executions    TestExecution[]
-  recordings    RecordingSession[]
-  bugs          Bug[]
-  testPlans     TestPlan[]
-  testSuites    TestSuite[]
-  members       ProjectMember[]
-  auditLogs     AuditLog[]
-  apiKeys       ProjectApiKey[]
-  github        GitHubIntegration?
-  jira          JiraIntegration?
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
+  id                Int                @id @default(autoincrement())
+  code              String             @unique
+  name              String
+  description       String?
+  repositoryUrl     String?
+  status            ProjectStatus      @default(ACTIVE)
+  ownerId           Int
+  owner             User               @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  environments      Environment[]
+  requirements      Requirement[]
+  scenarios         TestScenario[]
+  executions        TestExecution[]
+  recordings        RecordingSession[]
+  bugs              Bug[]
+  testPlans         TestPlan[]
+  testSuites        TestSuite[]
+  members           ProjectMember[]
+  auditLogs         AuditLog[]
+  apiKeys           ProjectApiKey[]
+  github            GitHubIntegration?
+  jira              JiraIntegration?
+  webhook           ProjectWebhook?
+  webhookDeliveries WebhookDelivery[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 }
 
 model ProjectMember {
@@ -346,6 +355,42 @@ model JiraIntegration {
 
   @@index([enabled])
   @@index([createdById])
+}
+
+model ProjectWebhook {
+  id              Int       @id @default(autoincrement())
+  projectId       Int       @unique
+  secretEncrypted String
+  secretIv        String
+  secretTag       String
+  enabled         Boolean   @default(true)
+  createdById     Int
+  project         Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy       User      @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  lastDeliveredAt DateTime?
+  lastError       String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([enabled])
+  @@index([createdById])
+}
+
+model WebhookDelivery {
+  id          Int                   @id @default(autoincrement())
+  projectId   Int
+  deliveryId  String
+  eventType   String
+  payloadHash String
+  status      WebhookDeliveryStatus @default(ACCEPTED)
+  executionId Int?
+  receivedAt  DateTime              @default(now())
+  processedAt DateTime?
+  project     Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, deliveryId])
+  @@index([projectId, receivedAt])
+  @@index([executionId])
 }
 
 model Environment {

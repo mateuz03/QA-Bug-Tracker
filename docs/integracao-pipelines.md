@@ -110,6 +110,35 @@ O token é cifrado com a mesma `INTEGRATION_ENCRYPTION_KEY` usada nas demais int
 
 A integração usa `/rest/api/3/issue` e envia a descrição em Atlassian Document Format. O conteúdo inclui reprodução, resultados, classificação, ambiente, cenário, execução, erro técnico, evidência e link de retorno. Como os workflows e nomes de status variam por projeto, esta versão não força transições do Jira: ela sincroniza os campos e preserva o fluxo configurado pela equipe.
 
+## Receber resultado por webhook assinado
+
+O proprietário do projeto pode gerar um webhook na área **Integração com pipelines**. O segredo é apresentado uma única vez e fica cifrado no banco. Configure o pipeline para enviar `POST` para:
+
+```text
+https://seu-dominio/api/webhooks/projects/ID_DO_PROJETO/pipeline
+```
+
+O corpo JSON aceito é:
+
+```json
+{
+  "event": "execution.completed",
+  "executionCode": "EXEC-00001",
+  "status": "PASSED",
+  "durationMs": 1400
+}
+```
+
+`status` também aceita `FAILED`, `BLOCKED` e `CANCELLED`; para falhas, envie opcionalmente `errorMessage`.
+
+Assine o corpo original com HMAC SHA-256 usando a sequência `timestamp + "." + corpo`, codificada em UTF-8. Envie:
+
+- `x-qa-signature-256: sha256=<hash hexadecimal>`;
+- `x-qa-timestamp: <Unix timestamp em segundos>`;
+- `x-qa-delivery: <identificador único por entrega>`.
+
+O servidor aceita timestamps de até cinco minutos, valida a assinatura em tempo constante e mantém o identificador de cada entrega por projeto. Uma entrega repetida recebe sucesso idempotente sem alterar novamente a execução. O webhook somente finaliza execuções que foram iniciadas por uma chave de pipeline externa.
+
 ## Segurança e auditoria
 
 - Somente proprietários podem criar, listar e revogar chaves.
@@ -120,4 +149,4 @@ A integração usa `/rest/api/3/issue` e envia a descrição em Atlassian Docume
 
 ## Próximas integrações
 
-- validar assinaturas de webhooks recebidos.
+- suportar eventos de progresso e anexos de evidências enviados pelo pipeline.

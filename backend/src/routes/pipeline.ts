@@ -53,12 +53,10 @@ pipelineRouter.post('/executions', async (req, res) => {
     createdById: key.createdById
   });
   const source = data.source || 'pipeline externo';
-  if (data.commitSha) {
-    await prisma.testExecution.update({
-      where: { id: execution.id },
-      data: { commitSha: data.commitSha, pipelineSource: source }
-    });
-  }
+  await prisma.testExecution.update({
+    where: { id: execution.id },
+    data: { pipelineSource: source, ...(data.commitSha ? { commitSha: data.commitSha } : {}) }
+  });
   await appendExecutionLog(execution.id, `Execução solicitada por ${source} usando a chave ${key.prefix}.`);
   await recordAudit({
     projectId: key.projectId,
